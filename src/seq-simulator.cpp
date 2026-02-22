@@ -23,24 +23,37 @@ public:
         }
         else{
             node->isLeaf = false;
-            auto mid = (bmin + bmax) * 0.5f;
-            //divide into 4 quad
+            Vec2 mid = (bmin + bmax) * 0.5f;
+
             std::vector<Particle> q0, q1, q2, q3;
-            for(auto p : particles) {
-                if (p.position.y < mid.y) {     // Bottom
-                    if (p.position.x < mid.x) q0.push_back(p); // Bottom-Left
-                    else                      q1.push_back(p); // Bottom-Right
-                } else {                        // Top
-                    if (p.position.x < mid.x) q2.push_back(p); // Top-Left
-                    else                      q3.push_back(p); // Top-Right
-                }
+
+            for (auto &p : particles)
+            {
+                bool left   = p.position.x < mid.x;
+                bool bottom = p.position.y < mid.y;
+
+                if (bottom && left)         q0.push_back(p); // 0 Bottom-Left
+                else if (bottom && !left)   q1.push_back(p); // 1 Bottom-Right
+                else if (!bottom && left)   q2.push_back(p); // 2 Top-Left
+                else                        q3.push_back(p); // 3 Top-Right
             }
 
             // Assigning to indices 0-3 based on the code's expected spatial layout
-            node->children[0] = buildQuadTree(q0, bmin, mid);
-            node->children[1] = buildQuadTree(q1, Vec2(mid.x, bmin.y), Vec2(bmax.x, mid.y));
-            node->children[2] = buildQuadTree(q2, Vec2(bmin.x, mid.y), Vec2(mid.x, bmax.y));
-            node->children[3] = buildQuadTree(q3, mid, bmax);
+            node->children[0] = buildQuadTree(q0,
+                                            bmin,
+                                            mid);
+
+            node->children[1] = buildQuadTree(q1,
+                                            Vec2(mid.x, bmin.y),
+                                            Vec2(bmax.x, mid.y));
+
+            node->children[2] = buildQuadTree(q2,
+                                            Vec2(bmin.x, mid.y),
+                                            Vec2(mid.x, bmax.y));
+
+            node->children[3] = buildQuadTree(q3,
+                                            mid,
+                                            bmax);
         }
         return node;
     }
@@ -53,7 +66,7 @@ public:
         Vec2 bmin(1e30f, 1e30f);
         Vec2 bmax(-1e30f, -1e30f);
 
-        for (auto & p : particles)
+        for (auto &p : particles)
         {
             bmin.x = fminf(bmin.x, p.position.x);
             bmin.y = fminf(bmin.y, p.position.y);
@@ -74,24 +87,26 @@ public:
     }
     virtual void simulateStep(AccelerationStructure * accel, std::vector<Particle> & particles, std::vector<Particle> & newParticles, StepParameters params) override
     {
-        QuadTree* quadTree = static_cast<QuadTree*>(accel);        
-        auto root = quadTree->root;
-        auto min = quadTree->bmin;
-        auto max = quadTree->bmax;
-        
-        for(int i =0 ; i<particles.size(); i++) {
-            auto p = particles[i];
+        QuadTree* quadTree = static_cast<QuadTree*>(accel);
+
+        for (int i = 0; i < (int)particles.size(); i++)
+        {
+            auto &pi = particles[i];
+
             std::vector<Particle> nearbyParticles;
-            quadTree->getParticles(nearbyParticles, p.position, params.cullRadius);
-
+            quadTree->getParticles(nearbyParticles, pi.position, params.cullRadius);
+            std::sort(nearbyParticles.begin(), nearbyParticles.end(),
+                    [](const Particle& a, const Particle& b)
+                    { return a.id < b.id; });
             Vec2 force(0.0f, 0.0f);
-            
-            for(auto np: nearbyParticles){
-                if (p.id == np.id) continue;
 
-                force += computeForce(p, np, params.cullRadius);
+            for (auto &pj : nearbyParticles)
+            {
+                if (pj.id == pi.id) continue;
+                force += computeForce(pi, pj, params.cullRadius);
             }
-            newParticles[i] = updateParticle(p, force, params.deltaTime);
+
+            newParticles[i] = updateParticle(pi, force, params.deltaTime);
         }
     }
 };
