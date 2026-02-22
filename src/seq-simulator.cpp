@@ -15,8 +15,47 @@ class SequentialNBodySimulator : public INBodySimulator
 public:
     std::shared_ptr<QuadTreeNode> buildQuadTree(std::vector<Particle> & particles, Vec2 bmin, Vec2 bmax)
     {
-       // TODO: implement a function that builds and returns a quadtree containing particles.
-        return nullptr;
+        auto node = std::make_shared<QuadTreeNode>();
+        if (particles.size() <= QuadTreeLeafSize) {
+            node->isLeaf = true;
+            node->particles = particles;
+            return node;
+        }
+        else{
+            node->isLeaf = false;
+            Vec2 mid = (bmin + bmax) * 0.5f;
+
+            std::vector<Particle> q0, q1, q2, q3;
+
+            for (auto &p : particles)
+            {
+                bool left   = p.position.x < mid.x;
+                bool bottom = p.position.y < mid.y;
+
+                if (bottom && left)         q0.push_back(p); // 0 Bottom-Left
+                else if (bottom && !left)   q1.push_back(p); // 1 Bottom-Right
+                else if (!bottom && left)   q2.push_back(p); // 2 Top-Left
+                else                        q3.push_back(p); // 3 Top-Right
+            }
+
+            // Assigning to indices 0-3 based on the code's expected spatial layout
+            node->children[0] = buildQuadTree(q0,
+                                            bmin,
+                                            mid);
+
+            node->children[1] = buildQuadTree(q1,
+                                            Vec2(mid.x, bmin.y),
+                                            Vec2(bmax.x, mid.y));
+
+            node->children[2] = buildQuadTree(q2,
+                                            Vec2(bmin.x, mid.y),
+                                            Vec2(mid.x, bmax.y));
+
+            node->children[3] = buildQuadTree(q3,
+                                            mid,
+                                            bmax);
+        }
+        return node;
     }
     virtual std::shared_ptr<AccelerationStructure> buildAccelerationStructure(std::vector<Particle> & particles)
     {
@@ -27,7 +66,7 @@ public:
         Vec2 bmin(1e30f, 1e30f);
         Vec2 bmax(-1e30f, -1e30f);
 
-        for (auto & p : particles)
+        for (auto &p : particles)
         {
             bmin.x = fminf(bmin.x, p.position.x);
             bmin.y = fminf(bmin.y, p.position.y);
@@ -48,9 +87,27 @@ public:
     }
     virtual void simulateStep(AccelerationStructure * accel, std::vector<Particle> & particles, std::vector<Particle> & newParticles, StepParameters params) override
     {
-        // TODO: implement sequential version of quad-tree accelerated n-body simulation here,
-        // using quadTree as acceleration structure
-       
+        QuadTree* quadTree = static_cast<QuadTree*>(accel);
+
+        for (int i = 0; i < (int)particles.size(); i++)
+        {
+            auto &pi = particles[i];
+
+            std::vector<Particle> nearbyParticles;
+            quadTree->getParticles(nearbyParticles, pi.position, params.cullRadius);
+            std::sort(nearbyParticles.begin(), nearbyParticles.end(),
+                    [](const Particle& a, const Particle& b)
+                    { return a.id < b.id; });
+            Vec2 force(0.0f, 0.0f);
+
+            for (auto &pj : nearbyParticles)
+            {
+                if (pj.id == pi.id) continue;
+                force += computeForce(pi, pj, params.cullRadius);
+            }
+
+            newParticles[i] = updateParticle(pi, force, params.deltaTime);
+        }
     }
 };
 
