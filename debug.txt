@@ -1,0 +1,4 @@
+[SEQ STEP 1] particle 444:
+  force=(0.507917345, -0.624697983)
+  num neighbors: 522
+  near-zero dist neighbor: id=443

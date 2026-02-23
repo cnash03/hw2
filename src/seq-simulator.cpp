@@ -16,26 +16,28 @@ public:
     std::shared_ptr<QuadTreeNode> buildQuadTree(std::vector<Particle> & particles, Vec2 bmin, Vec2 bmax)
     {
         auto node = std::make_shared<QuadTreeNode>();
-        if (particles.size() <= QuadTreeLeafSize) {
+        Vec2 mid = (bmin + bmax) * 0.5f;
+        bool degenerate = (mid.x == bmin.x || mid.x == bmax.x || 
+                            mid.y == bmin.y || mid.y == bmax.y); 
+        if ((int)particles.size() <= QuadTreeLeafSize|| degenerate ) {
             node->isLeaf = true;
             node->particles = particles;
             return node;
         }
         else{
             node->isLeaf = false;
-            Vec2 mid = (bmin + bmax) * 0.5f;
 
             std::vector<Particle> q0, q1, q2, q3;
 
-            for (auto &p : particles)
+            for (auto& p : particles)
             {
                 bool left   = p.position.x < mid.x;
                 bool bottom = p.position.y < mid.y;
 
-                if (bottom && left)         q0.push_back(p); // 0 Bottom-Left
-                else if (bottom && !left)   q1.push_back(p); // 1 Bottom-Right
-                else if (!bottom && left)   q2.push_back(p); // 2 Top-Left
-                else                        q3.push_back(p); // 3 Top-Right
+                if (bottom && left)        q0.push_back(p);
+                else if (bottom && !left)  q1.push_back(p);
+                else if (!bottom && left)  q2.push_back(p);
+                else                       q3.push_back(p);
             }
 
             // Assigning to indices 0-3 based on the code's expected spatial layout
@@ -86,29 +88,39 @@ public:
         return quadTree;
     }
     virtual void simulateStep(AccelerationStructure * accel, std::vector<Particle> & particles, std::vector<Particle> & newParticles, StepParameters params) override
+{
+    static int stepCount = 0;
+    stepCount++;
+
+    for (int i = 0; i < (int)particles.size(); i++)
     {
-        QuadTree* quadTree = static_cast<QuadTree*>(accel);
+        auto &pi = particles[i];
 
-        for (int i = 0; i < (int)particles.size(); i++)
+        std::vector<Particle> nearbyParticles;
+        accel->getParticles(nearbyParticles, pi.position, params.cullRadius);
+        std::sort(nearbyParticles.begin(), nearbyParticles.end(),
+              [](const Particle& a, const Particle& b) { return a.id < b.id; });
+
+        Vec2 force(0.0f, 0.0f);
+        for (auto &pj : nearbyParticles)
         {
-            auto &pi = particles[i];
+            if (pj.id == pi.id) continue;
+            force += computeForce(pi, pj, params.cullRadius);
+        }
 
-            std::vector<Particle> nearbyParticles;
-            quadTree->getParticles(nearbyParticles, pi.position, params.cullRadius);
-            std::sort(nearbyParticles.begin(), nearbyParticles.end(),
-                    [](const Particle& a, const Particle& b)
-                    { return a.id < b.id; });
-            Vec2 force(0.0f, 0.0f);
+        newParticles[i] = updateParticle(pi, force, params.deltaTime);
 
-            for (auto &pj : nearbyParticles)
-            {
-                if (pj.id == pi.id) continue;
-                force += computeForce(pi, pj, params.cullRadius);
-            }
-
-            newParticles[i] = updateParticle(pi, force, params.deltaTime);
+        if (stepCount == 1 && i == 443)
+        {
+            fprintf(stderr, "[SEQ STEP 1] particle 444:\n");
+            fprintf(stderr, "  force=(%.9f, %.9f)\n", force.x, force.y);
+            fprintf(stderr, "  num neighbors: %d\n", (int)nearbyParticles.size());
+            for (auto& pn : nearbyParticles)
+                if ((pi.position - pn.position).length() < 1e-3f)
+                    fprintf(stderr, "  near-zero dist neighbor: id=%d\n", pn.id);
         }
     }
+}
 };
 
 std::unique_ptr<INBodySimulator> createSequentialNBodySimulator()
