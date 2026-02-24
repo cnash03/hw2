@@ -16,46 +16,30 @@ public:
     std::shared_ptr<QuadTreeNode> buildQuadTree(std::vector<Particle> & particles, Vec2 bmin, Vec2 bmax)
     {
         auto node = std::make_shared<QuadTreeNode>();
-        Vec2 mid = (bmin + bmax) * 0.5f;
-        bool degenerate = (mid.x == bmin.x || mid.x == bmax.x || 
-                            mid.y == bmin.y || mid.y == bmax.y); 
-        if ((int)particles.size() <= QuadTreeLeafSize|| degenerate ) {
+
+        if (particles.size() <= QuadTreeLeafSize) {
             node->isLeaf = true;
             node->particles = particles;
             return node;
         }
         else{
             node->isLeaf = false;
-
+            auto mid = (bmin + bmax) * 0.5f;
             std::vector<Particle> q0, q1, q2, q3;
-
-            for (auto& p : particles)
-            {
-                bool left   = p.position.x < mid.x;
-                bool bottom = p.position.y < mid.y;
-
-                if (bottom && left)        q0.push_back(p);
-                else if (bottom && !left)  q1.push_back(p);
-                else if (!bottom && left)  q2.push_back(p);
-                else                       q3.push_back(p);
+            for(auto p : particles) {
+                if (p.position.y < mid.y) {     // Bottom
+                    if (p.position.x < mid.x) q0.push_back(p); // Bottom-Left
+                    else                      q1.push_back(p); // Bottom-Right
+                } else {                        // Top
+                    if (p.position.x < mid.x) q2.push_back(p); // Top-Left
+                    else                      q3.push_back(p); // Top-Right
+                }
             }
-
             // Assigning to indices 0-3 based on the code's expected spatial layout
-            node->children[0] = buildQuadTree(q0,
-                                            bmin,
-                                            mid);
-
-            node->children[1] = buildQuadTree(q1,
-                                            Vec2(mid.x, bmin.y),
-                                            Vec2(bmax.x, mid.y));
-
-            node->children[2] = buildQuadTree(q2,
-                                            Vec2(bmin.x, mid.y),
-                                            Vec2(mid.x, bmax.y));
-
-            node->children[3] = buildQuadTree(q3,
-                                            mid,
-                                            bmax);
+            node->children[0] = buildQuadTree(q0, bmin, mid);
+            node->children[1] = buildQuadTree(q1, Vec2(mid.x, bmin.y), Vec2(bmax.x, mid.y));
+            node->children[2] = buildQuadTree(q2, Vec2(bmin.x, mid.y), Vec2(mid.x, bmax.y));
+            node->children[3] = buildQuadTree(q3, mid, bmax);
         }
         return node;
     }
