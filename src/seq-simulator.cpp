@@ -88,39 +88,26 @@ public:
         return quadTree;
     }
     virtual void simulateStep(AccelerationStructure * accel, std::vector<Particle> & particles, std::vector<Particle> & newParticles, StepParameters params) override
-{
-    static int stepCount = 0;
-    stepCount++;
-
-    for (int i = 0; i < (int)particles.size(); i++)
     {
-        auto &pi = particles[i];
 
-        std::vector<Particle> nearbyParticles;
-        accel->getParticles(nearbyParticles, pi.position, params.cullRadius);
-        std::sort(nearbyParticles.begin(), nearbyParticles.end(),
-              [](const Particle& a, const Particle& b) { return a.id < b.id; });
 
-        Vec2 force(0.0f, 0.0f);
-        for (auto &pj : nearbyParticles)
+        for (int i = 0; i < (int)particles.size(); i++)
         {
-            if (pj.id == pi.id) continue;
-            force += computeForce(pi, pj, params.cullRadius);
-        }
+            auto &pi = particles[i];
 
-        newParticles[i] = updateParticle(pi, force, params.deltaTime);
+            std::vector<Particle> nearbyParticles;
+            accel->getParticles(nearbyParticles, pi.position, params.cullRadius);
 
-        if (stepCount == 1 && i == 443)
-        {
-            fprintf(stderr, "[SEQ STEP 1] particle 444:\n");
-            fprintf(stderr, "  force=(%.9f, %.9f)\n", force.x, force.y);
-            fprintf(stderr, "  num neighbors: %d\n", (int)nearbyParticles.size());
-            for (auto& pn : nearbyParticles)
-                if ((pi.position - pn.position).length() < 1e-3f)
-                    fprintf(stderr, "  near-zero dist neighbor: id=%d\n", pn.id);
+            Vec2 force(0.0f, 0.0f);
+            for (auto &pj : nearbyParticles)
+            {
+                if (pj.id == pi.id) continue;
+                force += computeForce(pi, pj, params.cullRadius);
+            }
+
+            newParticles[i] = updateParticle(pi, force, params.deltaTime);
         }
     }
-}
 };
 
 std::unique_ptr<INBodySimulator> createSequentialNBodySimulator()
