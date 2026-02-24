@@ -27,15 +27,14 @@ public:
             auto mid = (bmin + bmax) * 0.5f;
             std::vector<Particle> q0, q1, q2, q3;
             for(auto p : particles) {
-                if (p.position.y < mid.y) {     // Bottom
-                    if (p.position.x < mid.x) q0.push_back(p); // Bottom-Left
-                    else                      q1.push_back(p); // Bottom-Right
-                } else {                        // Top
-                    if (p.position.x < mid.x) q2.push_back(p); // Top-Left
-                    else                      q3.push_back(p); // Top-Right
+                if (p.position.y < mid.y) {    
+                    if (p.position.x < mid.x) q0.push_back(p); 
+                    else                      q1.push_back(p);
+                } else {                      
+                    if (p.position.x < mid.x) q2.push_back(p); 
+                    else                      q3.push_back(p); 
                 }
             }
-            // Assigning to indices 0-3 based on the code's expected spatial layout
             node->children[0] = buildQuadTree(q0, bmin, mid);
             node->children[1] = buildQuadTree(q1, Vec2(mid.x, bmin.y), Vec2(bmax.x, mid.y));
             node->children[2] = buildQuadTree(q2, Vec2(bmin.x, mid.y), Vec2(mid.x, bmax.y));
