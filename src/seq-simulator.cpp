@@ -16,30 +16,35 @@ public:
     std::shared_ptr<QuadTreeNode> buildQuadTree(std::vector<Particle> & particles, Vec2 bmin, Vec2 bmax)
     {
         auto node = std::make_shared<QuadTreeNode>();
+        Vec2 extent = bmax - bmin;
+        const float minExtent = 1e-5f;
 
-        if (particles.size() <= QuadTreeLeafSize) {
+        if (particles.size() <= QuadTreeLeafSize ||
+            (extent.x <= minExtent && extent.y <= minExtent))
+        {
             node->isLeaf = true;
             node->particles = particles;
             return node;
         }
-        else{
-            node->isLeaf = false;
-            auto mid = (bmin + bmax) * 0.5f;
-            std::vector<Particle> q0, q1, q2, q3;
-            for(auto p : particles) {
-                if (p.position.y < mid.y) {     // Bottom
-                    if (p.position.x < mid.x) q0.push_back(p); // Bottom-Left
-                    else                      q1.push_back(p); // Bottom-Right
-                } else {                        // Top
-                    if (p.position.x < mid.x) q2.push_back(p); // Top-Left
-                    else                      q3.push_back(p); // Top-Right
-                }
-            }
-            // Assigning to indices 0-3 based on the code's expected spatial layout
-            node->children[0] = buildQuadTree(q0, bmin, mid);
-            node->children[1] = buildQuadTree(q1, Vec2(mid.x, bmin.y), Vec2(bmax.x, mid.y));
-            node->children[2] = buildQuadTree(q2, Vec2(bmin.x, mid.y), Vec2(mid.x, bmax.y));
-            node->children[3] = buildQuadTree(q3, mid, bmax);
+
+        node->isLeaf = false;
+        Vec2 pivot = (bmin + bmax) * 0.5f;
+        std::vector<Particle> childParticles[4];
+        for (auto & p : particles)
+        {
+            int childIndex = (p.position.x < pivot.x ? 0 : 1) +
+                             ((p.position.y < pivot.y ? 0 : 1) << 1);
+            childParticles[childIndex].push_back(p);
+        }
+
+        Vec2 halfSize = extent * 0.5f;
+        for (int i = 0; i < 4; i++)
+        {
+            Vec2 childBMin;
+            childBMin.x = (i & 1) ? pivot.x : bmin.x;
+            childBMin.y = ((i >> 1) & 1) ? pivot.y : bmin.y;
+            Vec2 childBMax = childBMin + halfSize;
+            node->children[i] = buildQuadTree(childParticles[i], childBMin, childBMax);
         }
         return node;
     }
@@ -73,22 +78,26 @@ public:
     }
     virtual void simulateStep(AccelerationStructure * accel, std::vector<Particle> & particles, std::vector<Particle> & newParticles, StepParameters params) override
     {
+        auto quadTree = static_cast<QuadTree*>(accel);
+        if (!quadTree)
+        {
+            return;
+        }
 
-
+        std::vector<Particle> nearbyParticles;
         for (int i = 0; i < (int)particles.size(); i++)
         {
-            auto &pi = particles[i];
-
-            std::vector<Particle> nearbyParticles;
-            accel->getParticles(nearbyParticles, pi.position, params.cullRadius);
+            const Particle & pi = particles[i];
+            nearbyParticles.clear();
+            quadTree->getParticles(nearbyParticles, pi.position, params.cullRadius);
 
             Vec2 force(0.0f, 0.0f);
-            for (auto &pj : nearbyParticles)
+            for (auto & pj : nearbyParticles)
             {
-                if (pj.id == pi.id) continue;
+                if (pj.id == pi.id)
+                    continue;
                 force += computeForce(pi, pj, params.cullRadius);
             }
-
             newParticles[i] = updateParticle(pi, force, params.deltaTime);
         }
     }
